@@ -1,0 +1,64 @@
+<?xml version="1.0" encoding="utf-8"?>
+<PreferenceScreen xmlns:android="http://schemas.android.com/apk/res/android" >
+
+    <CheckBoxPreference
+        android:defaultValue="true"
+        android:key="persistentNotification"
+        android:summary="Hint to android not to kill smsapp"
+        android:title="Persistent notification" >
+    </CheckBoxPreference>
+
+    <CheckBoxPreference
+        android:defaultValue="true"
+        android:key="newMessageNotification"
+        android:title="New Message Notification" >
+    </CheckBoxPreference>
+
+    <CheckBoxPreference
+        android:defaultValue="true"
+        android:key="startAtBoot"
+        android:summary="Launch at boot?"
+        android:title="Start at phone boot" >
+    </CheckBoxPreference>
+
+    <!--
+    <CheckBoxPreference
+        android:defaultValue="false"
+        android:key="useBluetooth"
+        android:summary="Whether to use a bluetooth server?"
+        android:title="Use Bluetooth?" >
+    </CheckBoxPreference>
+ 
+    <CheckBoxPreference
+        android:defaultValue="true"
+        android:key="useWifi"
+        android:summary="Whether to use a wifi server?"
+        android:title="Use Wireless?" >
+    </CheckBoxPreference>
+    -->
+    
+    <Preference
+        android:enabled="false"
+        android:key="wifiAddress"
+        android:summary="Wifi server not started"
+        android:title="Wifi Address" >
+    </Preference>
+
+    <!--
+    <Preference
+        android:key="viewLog"
+        android:title="View the logcat output" />
+    -->
+
+    <Preference
+        android:enabled="false"
+        android:key="clients"
+        android:summary="0"
+        android:title="Clients"/>
+    
+
+    <Preference
+        android:key="changeMode"
+        android:title="Change client/server mode" >
+    </Preference>
+</PreferenceScreen>

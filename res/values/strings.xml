@@ -1,0 +1,16 @@
+<resources>
+
+    <string name="app_name">smsapp</string>
+ <!--    <string name="send">Send</string>
+    <string name="newmessage">New message</string>
+    <string name="addrecipient">Add recipient</string> -->
+    <string name="app_name_client">smsapp client</string>
+    <string name="title_nodevice">select server</string>
+    <string name="title_connected">connected</string>
+    <string name="title_not_connected">not connected</string>
+        <string name="send">Send</string>
+    <string name="newmessage">New conversation</string>
+    <string name="addrecipient">Set recipient</string>
+    <color name="black">#000000</color>
+
+</resources>
