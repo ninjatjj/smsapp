@@ -5,7 +5,6 @@ import java.util.UUID;
 import android.app.AlarmManager;
 import android.app.AlertDialog;
 import android.app.PendingIntent;
-import android.bluetooth.BluetoothAdapter;
 import android.content.ComponentName;
 import android.content.Context;
 import android.content.DialogInterface;
@@ -90,48 +89,10 @@ public class UserSettingsActivity extends PreferenceActivity implements
 			} else {
 				application.stopForeground();
 			}
-		} else if (key.equals("useBluetooth")) {
-			// Reset other items
-			CheckBoxPreference p = (CheckBoxPreference) findPreference("useBluetooth");
-			if (p.isChecked()) {
-				p = (CheckBoxPreference) findPreference("useWifi");
-				p.setChecked(false);
-
-				if (BluetoothAdapter.getDefaultAdapter() == null) {
-					AlertBox("Warning", "Bluetooth Not supported", false);
-				}
-				if (BluetoothAdapter.getDefaultAdapter() != null) {
-					if (!BluetoothAdapter.getDefaultAdapter().isEnabled()) {
-						Intent enableBtIntent = new Intent(
-								BluetoothAdapter.ACTION_REQUEST_ENABLE);
-						startActivity(enableBtIntent);
-					}
-				}
-				if (settings.getBoolean("useBluetooth", false)
-						&& settings.getString("remoteAddress", null) == null) {
-					startActivity(new Intent(
-							"android.bluetooth.devicepicker.action.LAUNCH")
-							.putExtra(
-									"android.bluetooth.devicepicker.extra.NEED_AUTH",
-									false)
-							.putExtra(
-									"android.bluetooth.devicepicker.extra.FILTER_TYPE",
-									0)
-							.setFlags(Intent.FLAG_ACTIVITY_EXCLUDE_FROM_RECENTS));
-				}
-			} else {
-				application.disconnect();
-				Intent i = new Intent(UserSettingsActivity.this,
-						SplashScreen.class);
-				startActivity(i);
-			}
 		} else if (key.equals("useWifi")) {
 			// Reset other items
 			CheckBoxPreference p = (CheckBoxPreference) findPreference("useWifi");
 			if (p.isChecked()) {
-				p = (CheckBoxPreference) findPreference("useBluetooth");
-				p.setChecked(false);
-
 				String address = settings.getString("wifiAddress", null);
 				if (address != null) {
 					String uuid = settings.getString("uuid", null);

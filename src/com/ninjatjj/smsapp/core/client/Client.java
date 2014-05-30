@@ -31,22 +31,16 @@ public abstract class Client {
 
 	private volatile boolean connected;
 
-	protected ReestablishConnection reestablishConnection;
+	protected ServerHandler reestablishConnection;
 
 	private volatile List<MessageListener> messageListeners = new ArrayList<MessageListener>();
 	private volatile List<ClientConnectionListener> clientConnectionListeners = new ArrayList<ClientConnectionListener>();
 
 	public volatile long lastPing;
 
-	protected abstract void disconnectBT();
-
-	public abstract void connectBT() throws Exception;
-
-	public abstract boolean shouldConnectBT();
-
 	public synchronized void start() {
 		if (reestablishConnection == null) {
-			reestablishConnection = new ReestablishConnection();
+			reestablishConnection = new ServerHandler();
 		}
 	}
 
@@ -133,7 +127,6 @@ public abstract class Client {
 	public synchronized void disconnect() {
 		boolean wasConnected = connected;
 		connected = false;
-		disconnectBT();
 		if (reestablishConnection != null) {
 			reestablishConnection.disconnect();
 		}
@@ -152,6 +145,8 @@ public abstract class Client {
 
 	protected abstract void reconnectImpl();
 
+	protected abstract void myConnected();
+
 	public boolean shouldConnectWifi() {
 		return hostname != null && port != null && uuid != null;
 	}
@@ -161,10 +156,10 @@ public abstract class Client {
 	}
 
 	public boolean canConnect() {
-		return shouldConnectBT() || shouldConnectWifi();
+		return shouldConnectWifi();
 	}
 
-	class ReestablishConnection extends Thread {
+	class ServerHandler extends Thread {
 
 		private AtomicBoolean doNotConnect = new AtomicBoolean(false);
 		private boolean connecting;
@@ -173,8 +168,8 @@ public abstract class Client {
 		private Socket socket;
 		private Object socketLock = new Object();
 
-		public ReestablishConnection() {
-			super("ReestablishConnection");
+		public ServerHandler() {
+			super("ServerHandler");
 			setDaemon(true);
 			start();
 		}
@@ -208,6 +203,7 @@ public abstract class Client {
 			synchronized (socketLock) {
 				if (socket != null) {
 					try {
+						debug("Closing socket: " + socket.getLocalPort());
 						socket.close();
 					} catch (IOException e) {
 						warn("could not close socket: " + e.getMessage(), e);
@@ -234,24 +230,7 @@ public abstract class Client {
 			while (!exit) {
 				// List<Exception> problems = new ArrayList<Exception>();
 				if (!connected) {
-					if (shouldConnectBT()) {
-						try {
-							connectBT();
-						} catch (EOFException e) {
-							warn("connection problem, scheduling reconnect", e);
-							for (ClientConnectionListener clientConnectionListener : clientConnectionListeners) {
-								clientConnectionListener
-										.cannotConnect("Client has not yet been accepted by server");
-							}
-						} catch (Exception e) {
-							warn("connection problem, scheduling reconnect: "
-									+ e.getClass() + " " + e.getMessage());
-							for (ClientConnectionListener clientConnectionListener : clientConnectionListeners) {
-								clientConnectionListener.cannotConnect(e
-										.getMessage());
-							}
-						}
-					} else if (shouldConnectWifi()) {
+					if (shouldConnectWifi()) {
 						connecting = true;
 						List<String> toCheck2 = new ArrayList<String>();
 						StringTokenizer stringTokenizer = new StringTokenizer(
@@ -279,8 +258,15 @@ public abstract class Client {
 													toCheck,
 													Integer.parseInt(Client.this.port)),
 											10000);
-									socket.setKeepAlive(true);
-									socket.setTcpNoDelay(true);
+									setName("ServerHandler-"
+											+ socket.getLocalPort());
+									debug("socket ports opened - client side: "
+											+ socket.getLocalPort()
+											+ " server side: "
+											+ socket.getRemoteSocketAddress());
+									myConnected();
+									// socket.setKeepAlive(true);
+									// socket.setTcpNoDelay(true);
 									this.outStream = new DataOutputStream(
 											socket.getOutputStream());
 									this.inStream = new DataInputStream(
@@ -306,16 +292,19 @@ public abstract class Client {
 													.longTimeToConnect();
 										}
 
-										if (socket != null) {
-											socket.setSoTimeout(0);
-										}
-										readLine = inStream.readUTF();
+										// if (socket != null) {
+										// socket.setSoTimeout(0);
+										// }
+										// readLine = inStream.readUTF();
 									}
-									if (!readLine.equals("smsappserver")) {
+									if (readLine == null
+											|| !readLine.equals("smsappserver")) {
 
 										synchronized (socketLock) {
 											if (socket != null) {
 												try {
+													debug("Closing socket2: "
+															+ socket.getLocalPort());
 													socket.close();
 												} catch (IOException e) {
 													warn("could not close socket: "
@@ -369,6 +358,8 @@ public abstract class Client {
 											synchronized (socketLock) {
 												if (socket != null) {
 													try {
+														debug("Closing socket3: "
+																+ socket.getLocalPort());
 														socket.close();
 													} catch (IOException e2) {
 														warn("could not close socket: "
@@ -388,6 +379,8 @@ public abstract class Client {
 								synchronized (socketLock) {
 									if (socket != null) {
 										try {
+											debug("Closing socket4: "
+													+ socket.getLocalPort());
 											socket.close();
 										} catch (IOException e2) {
 											warn("could not close socket: "
@@ -405,7 +398,7 @@ public abstract class Client {
 									warn("connection problem, scheduling reconnect: "
 											+ e.getClass()
 											+ " "
-											+ e.getMessage());
+											+ e.getMessage(), e);
 								}
 								synchronized (doNotConnect) {
 									if (doNotConnect.get()) {
@@ -426,6 +419,7 @@ public abstract class Client {
 						clientConnectionListener
 								.cannotConnect("Could not connect to any known server");
 					}
+					setName("ServerHandler-waitingToReconnect60");
 					waitToReconnect(60000);
 				} else {
 					Thread pingThread = new Thread("PingChecker") {
@@ -509,6 +503,7 @@ public abstract class Client {
 									e1);
 						}
 
+						setName("ServerHandler-waitingToReconnect10");
 						waitToReconnect(10000);
 					}
 				}

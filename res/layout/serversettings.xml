@@ -21,22 +21,6 @@
         android:title="Start at phone boot" >
     </CheckBoxPreference>
 
-    <!--
-    <CheckBoxPreference
-        android:defaultValue="false"
-        android:key="useBluetooth"
-        android:summary="Whether to use a bluetooth server?"
-        android:title="Use Bluetooth?" >
-    </CheckBoxPreference>
- 
-    <CheckBoxPreference
-        android:defaultValue="true"
-        android:key="useWifi"
-        android:summary="Whether to use a wifi server?"
-        android:title="Use Wireless?" >
-    </CheckBoxPreference>
-    -->
-    
     <Preference
         android:enabled="false"
         android:key="wifiAddress"
@@ -49,12 +33,6 @@
         android:key="viewLog"
         android:title="View the logcat output" />
     -->
-
-    <Preference
-        android:enabled="false"
-        android:key="clients"
-        android:summary="0"
-        android:title="Clients"/>
     
 
     <Preference

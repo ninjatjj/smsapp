@@ -5,21 +5,17 @@ import java.util.HashMap;
 import java.util.Map;
 import java.util.Set;
 import java.util.TreeSet;
-import java.util.UUID;
 
 import android.app.AlarmManager;
 import android.app.Notification;
 import android.app.NotificationManager;
 import android.app.PendingIntent;
 import android.app.Service;
-import android.bluetooth.BluetoothAdapter;
-import android.bluetooth.BluetoothDevice;
 import android.content.BroadcastReceiver;
 import android.content.Context;
 import android.content.Intent;
 import android.content.IntentFilter;
 import android.content.SharedPreferences;
-import android.content.SharedPreferences.Editor;
 import android.net.ConnectivityManager;
 import android.net.NetworkInfo;
 import android.os.Binder;
@@ -50,17 +46,7 @@ public class SmsApplicationClient extends Service implements
 		@Override
 		public void onReceive(Context context, final Intent intent) {
 			final String action = intent.getAction();
-			if (action.equals(BluetoothAdapter.ACTION_STATE_CHANGED)) {
-				final int state = intent.getIntExtra(
-						BluetoothAdapter.EXTRA_STATE, BluetoothAdapter.ERROR);
-				switch (state) {
-				case BluetoothAdapter.STATE_ON:
-					if (myClient.shouldConnectBT()) {
-						myClient.reconnect();
-					}
-					break;
-				}
-			} else if (action.equals("android.net.conn.CONNECTIVITY_CHANGE")) {
+			if (action.equals("android.net.conn.CONNECTIVITY_CHANGE")) {
 				ConnectivityManager conMan = (ConnectivityManager) context
 						.getSystemService(Context.CONNECTIVITY_SERVICE);
 				NetworkInfo netInfo = conMan.getActiveNetworkInfo();
@@ -70,27 +56,6 @@ public class SmsApplicationClient extends Service implements
 						myClient.reconnect();
 					}
 				}
-			} else if ("android.bluetooth.devicepicker.action.DEVICE_SELECTED"
-					.equals(intent.getAction())) {
-				final BluetoothDevice device = (BluetoothDevice) intent
-						.getParcelableExtra(BluetoothDevice.EXTRA_DEVICE);
-
-				final Editor settings = PreferenceManager
-						.getDefaultSharedPreferences(context).edit();
-				settings.putString("remoteAddress", device.getAddress());
-
-				if (uuid == null) {
-					String uuid = UUID.randomUUID().toString();
-					settings.putString("uuid", uuid);
-					SmsApplicationClient.this.uuid = uuid;
-				}
-				settings.commit();
-
-				myClient.setRemoteDevice(device.getAddress());
-
-				Intent i = new Intent(SmsApplicationClient.this,
-						ConversationsActivity.class);
-				startActivity(i);
 			}
 		}
 	};
@@ -128,15 +93,9 @@ public class SmsApplicationClient extends Service implements
 
 		super.onCreate();
 
-		IntentFilter filter3 = new IntentFilter();
-		filter3.addAction("android.bluetooth.adapter.action.STATE_CHANGED");
-		registerReceiver(receiver, filter3);
 		IntentFilter filter4 = new IntentFilter();
 		filter4.addAction("android.net.conn.CONNECTIVITY_CHANGE");
 		registerReceiver(receiver, filter4);
-		IntentFilter filter5 = new IntentFilter();
-		filter5.addAction("android.bluetooth.devicepicker.action.DEVICE_SELECTED");
-		registerReceiver(receiver, filter5);
 
 		if (PreferenceManager.getDefaultSharedPreferences(this).getBoolean(
 				"persistentNotification", true)) {

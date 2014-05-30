@@ -1,14 +1,9 @@
 package com.ninjatjj.smsapp.client;
 
-import java.io.IOException;
-import java.util.UUID;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 import android.app.AlarmManager;
 import android.app.PendingIntent;
-import android.bluetooth.BluetoothAdapter;
-import android.bluetooth.BluetoothDevice;
-import android.bluetooth.BluetoothSocket;
 import android.content.BroadcastReceiver;
 import android.content.Context;
 import android.content.Intent;
@@ -22,7 +17,6 @@ public class MyClient extends Client {
 
 	private SmsApplicationClient service;
 	private AlarmManager timer;
-	volatile private String remoteDevice;
 	private AtomicBoolean reconnect = new AtomicBoolean(false);
 	private Object o;
 
@@ -30,7 +24,6 @@ public class MyClient extends Client {
 			String remoteDevice, String hostname, String port, String uuid) {
 		this.service = service;
 		this.timer = alarmManager;
-		this.remoteDevice = remoteDevice;
 
 		this.hostname = hostname;
 		this.port = port;
@@ -42,6 +35,13 @@ public class MyClient extends Client {
 		synchronized (reconnect) {
 			reconnect.set(true);
 			reconnect.notify();
+		}
+	}
+
+	@Override
+	protected void myConnected() {
+		synchronized (reconnect) {
+			reconnect.set(false);
 		}
 	}
 
@@ -91,6 +91,8 @@ public class MyClient extends Client {
 
 				timerTask.cancel();
 				service.unregisterReceiver(receiver);
+			} else {
+				debug("Reconnect get and set false");
 			}
 		}
 	}
@@ -144,38 +146,6 @@ public class MyClient extends Client {
 		}
 	}
 
-	private BluetoothSocket socket = null;
-
-	@Override
-	public boolean shouldConnectBT() {
-		return remoteDevice != null;
-	}
-
-	@Override
-	public void connectBT() throws Exception {
-		BluetoothDevice device = BluetoothAdapter.getDefaultAdapter()
-				.getRemoteDevice(remoteDevice);
-		socket = device.createRfcommSocketToServiceRecord(UUID
-				.fromString("5B92EE2B-75AB-4C71-AF22-5AF9861D182B"));
-		BluetoothAdapter.getDefaultAdapter().cancelDiscovery();
-		socket.connect();
-
-		uuid = UUID.randomUUID().toString(); // TODO save this
-		// connectImpl(socket.getOutputStream(), socket.getInputStream());
-	}
-
-	@Override
-	public void disconnectBT() {
-		if (socket != null) {
-			try {
-				socket.close();
-			} catch (IOException e) {
-				warn("could not close socket: " + e.getMessage(), e);
-			}
-			socket = null;
-		}
-	}
-
 	@Override
 	protected void debug(String message) {
 		Log.d("smsapp", message);
@@ -189,10 +159,6 @@ public class MyClient extends Client {
 	@Override
 	protected void warn(String message) {
 		Log.w("smsapp", message);
-	}
-
-	public void setRemoteDevice(String address) {
-		this.remoteDevice = address;
 	}
 
 	@Override

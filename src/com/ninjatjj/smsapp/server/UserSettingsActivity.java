@@ -28,8 +28,6 @@ public class UserSettingsActivity extends PreferenceActivity implements
 
 	private SmsApplicationServer application;
 
-	private Preference connectedClientsCountItem;
-
 	private Handler handler = new Handler() {
 		@Override
 		public void handleMessage(Message msg) {
@@ -69,10 +67,6 @@ public class UserSettingsActivity extends PreferenceActivity implements
 
 			Preference wifiAddress = findPreference("wifiAddress");
 			wifiAddress.setSummary(application.getWifiAddress());
-
-			UserSettingsActivity.this.connectedClientsCountItem = findPreference("clients");
-			connectedClientsCountItem.setSummary(""
-					+ application.getConnectedClientCount());
 
 			application.addConnectionListener(UserSettingsActivity.this);
 
@@ -152,11 +146,5 @@ public class UserSettingsActivity extends PreferenceActivity implements
 
 	@Override
 	public void connectionStateChange(final int numberOfClients) {
-		runOnUiThread(new Runnable() {
-			@Override
-			public void run() {
-				connectedClientsCountItem.setSummary("" + numberOfClients);
-			}
-		});
 	}
 }

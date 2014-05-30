@@ -18,21 +18,7 @@
         android:summary="Launch at boot?"
         android:title="Start at phone boot" >
     </CheckBoxPreference>
-    <!-- 
-    <CheckBoxPreference
-        android:defaultValue="false"
-        android:key="useBluetooth"
-        android:summary="Whether to use a bluetooth server?"
-        android:title="Use Bluetooth?" >
-    </CheckBoxPreference>
-    <CheckBoxPreference
-        android:defaultValue="true"
-        android:key="useWifi"
-        android:summary="Whether to use a wifi server?"
-        android:title="Use Wireless?" >
-    </CheckBoxPreference>
-     -->
-
+    
     <EditTextPreference
         android:enabled="true"
         android:key="wifiAddress"

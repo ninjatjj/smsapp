@@ -4,12 +4,10 @@ import android.content.ComponentName;
 import android.content.Context;
 import android.content.Intent;
 import android.content.ServiceConnection;
-import android.content.SharedPreferences;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.IBinder;
 import android.os.Message;
-import android.preference.PreferenceManager;
 import android.view.Menu;
 import android.view.MenuInflater;
 import android.view.MenuItem;
@@ -82,22 +80,6 @@ public class ConversationsActivity extends AbstractConversationsActivity
 					.addMessageListener(ConversationsActivity.this);
 			((SmsApplicationClient) application).getClient()
 					.addClientConnectionListener(ConversationsActivity.this);
-
-			final SharedPreferences settings = PreferenceManager
-					.getDefaultSharedPreferences(ConversationsActivity.this);
-
-			if (settings.getBoolean("useBluetooth", false)
-					&& settings.getString("remoteAddress", null) == null) {
-				startActivity(new Intent(
-						"android.bluetooth.devicepicker.action.LAUNCH")
-						.putExtra(
-								"android.bluetooth.devicepicker.extra.NEED_AUTH",
-								false)
-						.putExtra(
-								"android.bluetooth.devicepicker.extra.FILTER_TYPE",
-								0)
-						.setFlags(Intent.FLAG_ACTIVITY_EXCLUDE_FROM_RECENTS));
-			}
 		}
 
 		public void onServiceDisconnected(ComponentName className) {

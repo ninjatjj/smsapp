@@ -1,11 +1,8 @@
 package com.ninjatjj.smsapp.server;
 
-import java.io.Closeable;
 import java.io.DataInputStream;
 import java.io.DataOutputStream;
 import java.io.IOException;
-import java.io.InputStream;
-import java.io.OutputStream;
 import java.math.BigInteger;
 import java.net.InetAddress;
 import java.net.ServerSocket;
@@ -29,9 +26,6 @@ import android.app.Notification;
 import android.app.NotificationManager;
 import android.app.PendingIntent;
 import android.app.Service;
-import android.bluetooth.BluetoothAdapter;
-import android.bluetooth.BluetoothServerSocket;
-import android.bluetooth.BluetoothSocket;
 import android.content.BroadcastReceiver;
 import android.content.ContentValues;
 import android.content.Context;
@@ -45,8 +39,11 @@ import android.net.ConnectivityManager;
 import android.net.NetworkInfo;
 import android.net.Uri;
 import android.net.wifi.WifiManager;
+import android.net.wifi.WifiManager.WifiLock;
 import android.os.Binder;
 import android.os.IBinder;
+import android.os.PowerManager;
+import android.os.PowerManager.WakeLock;
 import android.os.SystemClock;
 import android.preference.PreferenceManager;
 import android.support.v4.app.NotificationCompat;
@@ -69,9 +66,6 @@ public class SmsApplicationServer extends Service implements SmsApplication {
 
 	private AlarmManager timer;
 
-	private boolean useBluetooth;
-	private boolean useWifi;
-
 	public static final UUID MY_UUID_SECURE = UUID
 			.fromString("5B92EE2B-75AB-4C71-AF22-5AF9861D182B");
 	public static final int SMSAPP_PORT = 8765;
@@ -80,11 +74,11 @@ public class SmsApplicationServer extends Service implements SmsApplication {
 	private List<MessageListener> messageListeners = new ArrayList<MessageListener>();
 	private List<ConnectionListener> connectionListeners = new ArrayList<ConnectionListener>();
 	private List<SignalStrengthListener> signalStrengthListeners = new ArrayList<SignalStrengthListener>();
+	private volatile List<ClientHandler> handlers = new ArrayList<ClientHandler>();
 
 	private Map<String, Sms> pending = new HashMap<String, Sms>();
 	private Map<String, Set<Sms>> messages = new HashMap<String, Set<Sms>>();
 
-	private BluetoothServerSocketProcessor bssp;
 	private ServerSocketProcessor ssp;
 
 	// Weak reference
@@ -175,39 +169,10 @@ public class SmsApplicationServer extends Service implements SmsApplication {
 						}
 					}.start();
 				}
-			} else if (action.equals(BluetoothAdapter.ACTION_STATE_CHANGED)) {
-				final int state = intent.getIntExtra(
-						BluetoothAdapter.EXTRA_STATE, BluetoothAdapter.ERROR);
-				switch (state) {
-				case BluetoothAdapter.STATE_ON:
-					if (bssp != null) {
-						new Thread("SMSAPP-resumeServer") {
-							public void run() {
-								if (bssp != null) {
-									bssp.resumeServer();
-								}
-							}
-						}.start();
-					}
-					break;
-				case BluetoothAdapter.STATE_OFF:
-					if (bssp != null) {
-						new Thread("SMSAPP-pauseServer") {
-							public void run() {
-								if (bssp != null) {
-									bssp.pauseServer();
-								}
-							}
-						}.start();
-					}
-					break;
-				}
 			} else if (action.equals("android.net.conn.CONNECTIVITY_CHANGE")) {
-				ConnectivityManager conMan = (ConnectivityManager) context
+				ConnectivityManager conMan = (ConnectivityManager) SmsApplicationServer.this
 						.getSystemService(Context.CONNECTIVITY_SERVICE);
 
-				NetworkInfo mobNetInfo = conMan
-						.getNetworkInfo(ConnectivityManager.TYPE_MOBILE);
 				NetworkInfo netInfo = conMan.getActiveNetworkInfo();
 				if (netInfo != null
 						&& netInfo.getType() == ConnectivityManager.TYPE_WIFI) {
@@ -238,6 +203,8 @@ public class SmsApplicationServer extends Service implements SmsApplication {
 	private SharedPreferences defaultSharedPreferences;
 
 	private Map<String, Set<Sms>> currentNotification = new HashMap<String, Set<Sms>>();
+
+	private WifiLock createWifiLock;
 
 	// private volatile Notification persistentNotification;
 
@@ -290,9 +257,6 @@ public class SmsApplicationServer extends Service implements SmsApplication {
 		IntentFilter filter2 = new IntentFilter();
 		filter2.addAction("tom.SMS_SENT");
 		registerReceiver(receiver, filter2);
-		IntentFilter filter3 = new IntentFilter();
-		filter3.addAction("android.bluetooth.adapter.action.STATE_CHANGED");
-		registerReceiver(receiver, filter3);
 		IntentFilter filter4 = new IntentFilter();
 		filter4.addAction("android.net.conn.CONNECTIVITY_CHANGE");
 		registerReceiver(receiver, filter4);
@@ -322,64 +286,11 @@ public class SmsApplicationServer extends Service implements SmsApplication {
 			// TODO report to application that it won't work!
 		}
 
-		if (defaultSharedPreferences.getBoolean("useBluetooth", false)) {
-			useBluetooth = true;
-			bssp = new BluetoothServerSocketProcessor();
-			bssp.start();
-		}
-
-		if (defaultSharedPreferences.getBoolean("useWifi", true)) {
-			useWifi = true;
-			ssp = new ServerSocketProcessor();
-			ssp.start();
-		}
-
-		defaultSharedPreferences
-				.registerOnSharedPreferenceChangeListener(listener = new SharedPreferences.OnSharedPreferenceChangeListener() {
-
-					@Override
-					public void onSharedPreferenceChanged(
-							SharedPreferences sharedPreferences, String key) {
-						if (key.equals("useWifi")) {
-							SmsApplicationServer.this.useWifi = sharedPreferences
-									.getBoolean("useWifi", true);
-							if (useWifi) {
-								if (ssp == null) {
-									ssp = new ServerSocketProcessor();
-									ssp.start();
-								} else {
-									ConnectivityManager conMan = (ConnectivityManager) SmsApplicationServer.this
-											.getApplicationContext()
-											.getSystemService(
-													Context.CONNECTIVITY_SERVICE);
-									NetworkInfo netInfo = conMan
-											.getActiveNetworkInfo();
-									if (netInfo != null
-											&& netInfo.getType() == ConnectivityManager.TYPE_WIFI) {
-										ssp.resumeServer();
-									}
-								}
-							} else {
-								ssp.pauseServer();
-							}
-						} else if (key.equals("useBluetooth")) {
-							SmsApplicationServer.this.useBluetooth = sharedPreferences
-									.getBoolean("useBluetooth", false);
-							if (useBluetooth) {
-								if (bssp == null) {
-									bssp = new BluetoothServerSocketProcessor();
-									bssp.start();
-								} else {
-									bssp.resumeServer();
-								}
-							} else {
-								bssp.pauseServer();
-							}
-						}
-
-					}
-
-				});
+		ssp = new ServerSocketProcessor();
+		WifiManager wifiManager = (WifiManager) SmsApplicationServer.this
+				.getSystemService(Context.WIFI_SERVICE);
+		createWifiLock = wifiManager.createWifiLock("smsapp");
+		createWifiLock.acquire();
 	}
 
 	@Override
@@ -387,9 +298,6 @@ public class SmsApplicationServer extends Service implements SmsApplication {
 		super.onDestroy();
 		unregisterReceiver(receiver);
 		messagePoller.shutdown();
-		if (bssp != null) {
-			bssp.stopServer();
-		}
 		if (ssp != null) {
 			ssp.stopServer();
 		}
@@ -398,6 +306,8 @@ public class SmsApplicationServer extends Service implements SmsApplication {
 			stopForeground();
 		}
 		notificationManger.cancel(02);
+
+		createWifiLock.release();
 	}
 
 	public Set<Sms> getMessages() {
@@ -440,17 +350,18 @@ public class SmsApplicationServer extends Service implements SmsApplication {
 		Sms sms = pending.get(createdDate);
 		if (sms != null) {
 
+			// TODO make configurable - my Z1 does this automatically
 			// Write it to storage as soon as we determine that it was sent, in
 			// a crash we would miss this
-			ContentValues values = new ContentValues();
-			values.put("address", sms.getAddress());
-			values.put("body", sms.getBody());
-			values.put("date", sms.getReceived().getTime());
-			values.put("read", "1");
-			values.put("status", "0");
-			values.put("type", "2");
-			getContentResolver()
-					.insert(Uri.parse("content://sms/sent"), values);
+			// ContentValues values = new ContentValues();
+			// values.put("address", sms.getAddress());
+			// values.put("body", sms.getBody());
+			// values.put("date", sms.getReceived().getTime());
+			// values.put("read", "1");
+			// values.put("status", "0");
+			// values.put("type", "2");
+			// getContentResolver()
+			// .insert(Uri.parse("content://sms/sent"), values);
 
 			messagePoller.checkNow();
 		} else {
@@ -756,107 +667,15 @@ public class SmsApplicationServer extends Service implements SmsApplication {
 		}
 	}
 
-	private class BluetoothServerSocketProcessor extends Thread {
-		private BluetoothServerSocket mmServerSocket;
-		private volatile boolean stopping;
-		private BluetoothAdapter bluetoothAdapter = BluetoothAdapter
-				.getDefaultAdapter();
-		private volatile List<ClientHandler> handlers = new ArrayList<ClientHandler>();
-
-		public BluetoothServerSocketProcessor() {
-			super("BluetoothServerSocketProcessor");
-		}
-
-		public synchronized void pauseServer() {
-			Log.d("smsapp", "BluetoothServerSocketProcessor pauseServer");
-			if (mmServerSocket != null) {
-				try {
-					mmServerSocket.close();
-				} catch (IOException e) {
-					Log.e("smsapp",
-							"Could not close server socket: " + e.getMessage(),
-							e);
-				}
-
-				mmServerSocket = null;
-			}
-
-			Iterator<ClientHandler> iterator = handlers.iterator();
-			while (iterator.hasNext()) {
-				iterator.next().disconnect();
-			}
-		}
-
-		public synchronized void resumeServer() {
-			if (useBluetooth && bluetoothAdapter.isEnabled()) {
-				notify();
-			}
-		}
-
-		public synchronized void stopServer() {
-			stopping = true;
-			pauseServer();
-		}
-
-		public void run() {
-			while (!stopping) {
-				try {
-					Log.d("smsapp",
-							"Waiting for input on: "
-									+ MY_UUID_SECURE.toString());
-					mmServerSocket = bluetoothAdapter
-							.listenUsingRfcommWithServiceRecord("MYYAPP",
-									MY_UUID_SECURE);
-					while (!stopping) {
-						BluetoothSocket socket = mmServerSocket.accept();
-						try {
-							ClientHandler clientHandler = new ClientHandler(
-									socket, socket.getInputStream(),
-									socket.getOutputStream(), handlers);
-							handlers.add(clientHandler);
-							synchronized (signalStrengthListeners) {
-								signalStrengthListeners.add(clientHandler);
-							}
-							clientHandler.start();
-						} catch (IOException e) {
-							Log.w("smsapp", "Could not create handler: " + e, e);
-						}
-					}
-				} catch (Exception e) {
-					synchronized (this) {
-						if (!stopping) {
-							Log.w("smsapp",
-									"Exception from socket, probably disabled: "
-											+ e, e);
-						}
-						if (!stopping
-								&& (!useBluetooth || !bluetoothAdapter
-										.isEnabled())) {
-							pauseServer();
-							try {
-								wait();
-							} catch (InterruptedException e1) {
-								Log.e("smsapp", "Could not wait to reconnect");
-							}
-						}
-					}
-				}
-			}
-		}
-
-		public int getConnectedClientCount() {
-			return handlers.size();
-		}
-	}
-
 	private class ServerSocketProcessor extends Thread {
 		private volatile boolean stopping;
 		// private JmDNS jmdns;
 		private ServerSocket serverSocket;
-		private volatile List<ClientHandler> handlers = new ArrayList<ClientHandler>();
+		private boolean paused;
 
 		public ServerSocketProcessor() {
 			super("ServerSocketProcessor");
+			start();
 		}
 
 		public synchronized void pauseServer() {
@@ -879,6 +698,7 @@ public class SmsApplicationServer extends Service implements SmsApplication {
 
 			if (serverSocket != null) {
 				try {
+					Log.d("smsapp", "ServerSocketProcessor close server socket");
 					serverSocket.close();
 				} catch (IOException e) {
 					Log.e("smsapp",
@@ -895,9 +715,9 @@ public class SmsApplicationServer extends Service implements SmsApplication {
 		}
 
 		public synchronized void resumeServer() {
-			if (useWifi) {
+			if (paused) {
 				Log.d("smsapp", "ServerSocketProcessor resumeServer");
-				WifiManager wifiManager = (WifiManager) getApplicationContext()
+				WifiManager wifiManager = (WifiManager) SmsApplicationServer.this
 						.getSystemService(Context.WIFI_SERVICE);
 
 				for (int i = 0; i < 10; i++) {
@@ -947,7 +767,7 @@ public class SmsApplicationServer extends Service implements SmsApplication {
 			while (!stopping) {
 				try {
 
-					WifiManager wifiManager = (WifiManager) getApplicationContext()
+					WifiManager wifiManager = (WifiManager) SmsApplicationServer.this
 							.getSystemService(Context.WIFI_SERVICE);
 					int ipAddress = wifiManager.getConnectionInfo()
 							.getIpAddress();
@@ -985,6 +805,7 @@ public class SmsApplicationServer extends Service implements SmsApplication {
 					// + e.getMessage(), e);
 					// }
 
+					Log.d("smsapp", "ServerSocketProcessor new server socket");
 					serverSocket = new ServerSocket(SMSAPP_PORT, 50,
 							wifiAddress);
 
@@ -994,14 +815,8 @@ public class SmsApplicationServer extends Service implements SmsApplication {
 									+ SMSAPP_PORT);
 					while (!stopping) {
 						Socket socket = serverSocket.accept();
-						socket.setKeepAlive(true);
-						socket.setTcpNoDelay(true);
 						try {
-							ClientHandler clientHandler = new ClientHandler(
-									socket, socket.getInputStream(),
-									socket.getOutputStream(), handlers);
-							handlers.add(clientHandler);
-							clientHandler.start();
+							new ClientHandler(socket);
 						} catch (IOException e) {
 							Log.w("smsapp", "Could not create handler: " + e, e);
 						}
@@ -1013,7 +828,9 @@ public class SmsApplicationServer extends Service implements SmsApplication {
 									+ e, e);
 							pauseServer();
 							try {
+								paused = true;
 								wait();
+								paused = false;
 							} catch (InterruptedException e1) {
 								Log.e("smsapp", "Could not wait to reconnect");
 							}
@@ -1022,57 +839,50 @@ public class SmsApplicationServer extends Service implements SmsApplication {
 				}
 			}
 		}
-
-		public int getConnectedClientCount() {
-			return handlers.size();
-		}
 	}
 
 	private class ClientHandler extends Thread implements MessageListener,
 			SignalStrengthListener {
 
-		private Closeable closeable;
 		private DataOutputStream pWriter;
 		private DataInputStream bReader;
-		private OutputStream outStream;
 		private Socket socket;
 		private final String remoteName;
 		private volatile long lastPing;
 		private BroadcastReceiver toCancel;
-		private volatile List<ClientHandler> handlers = new ArrayList<ClientHandler>();
 		private PendingIntent pi;
+		private String clientID;
+		private WakeLock wl;
 
-		public ClientHandler(BluetoothSocket closeable,
-				InputStream inputStream, OutputStream outputStream,
-				List<ClientHandler> handlers) throws IOException {
-			super("ClientHandler-" + closeable.getRemoteDevice().getAddress());
-			this.closeable = closeable;
-			this.outStream = outputStream;
-			this.bReader = new DataInputStream(inputStream);
-			addMessageListener(this);
-			remoteName = closeable.getRemoteDevice().getAddress();
-			this.handlers = handlers;
-		}
-
-		public ClientHandler(Socket socket, InputStream inputStream,
-				OutputStream outputStream, List<ClientHandler> handlers) {
+		public ClientHandler(Socket socket) throws IOException {
 			super("ClientHandler-" + socket.getRemoteSocketAddress());
+			PowerManager pm = (PowerManager) getSystemService(Context.POWER_SERVICE);
+			wl = pm.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK
+					| PowerManager.ACQUIRE_CAUSES_WAKEUP, getName());
+			wl.acquire();
 			this.socket = socket;
-			this.outStream = outputStream;
-			this.bReader = new DataInputStream(inputStream);
-			addMessageListener(this);
+			// socket.setKeepAlive(true);
+			// socket.setTcpNoDelay(true);
+			this.pWriter = new DataOutputStream(socket.getOutputStream());
+			this.bReader = new DataInputStream(socket.getInputStream());
 			remoteName = socket.getRemoteSocketAddress().toString();
-			this.handlers = handlers;
+			start();
 		}
 
 		public synchronized void disconnect() {
+			if (toCancel != null) {
+				Log.d("smsapp", "cancelling timer");
+				timer.cancel(pi);
+				unregisterReceiver(toCancel);
+				toCancel = null;
+			}
+
 			Log.d("smsapp", "disconnecting: " + remoteName);
 			try {
-				if (closeable != null) {
-					closeable.close();
-					closeable = null;
-				}
 				if (socket != null) {
+					Log.d("smsapp",
+							"ClientHandler close socket: "
+									+ socket.getLocalPort());
 					socket.close();
 					socket = null;
 				}
@@ -1084,11 +894,9 @@ public class SmsApplicationServer extends Service implements SmsApplication {
 				signalStrengthListeners.remove(this);
 			}
 			messageListeners.remove(this);
-			if (toCancel != null) {
-				Log.d("smsapp", "cancelling timer");
-				timer.cancel(pi);
-				unregisterReceiver(toCancel);
-				toCancel = null;
+			if (wl != null) {
+				wl.release();
+				wl = null;
 			}
 		}
 
@@ -1151,65 +959,103 @@ public class SmsApplicationServer extends Service implements SmsApplication {
 		}
 
 		public void run() {
+			addMessageListener(this);
+
+			toCancel = new BroadcastReceiver() {
+				@Override
+				public void onReceive(Context c, Intent i) {
+					if (System.currentTimeMillis() - lastPing > Constants.PING_RATE * 2) {
+						Log.w("smsapp", "PingHandler-" + remoteName
+								+ "did not receive a ping within: "
+								+ (Constants.PING_RATE * 2) / 1000
+								+ " seconds, last ping was at: "
+								+ new Date(lastPing));
+						disconnect();
+					} else {
+						try {
+							synchronized (pWriter) {
+								pWriter.writeByte(Constants.PING);
+								pWriter.flush();
+							}
+						} catch (Throwable e) {
+							Log.w("smsapp", "PingHandler-" + remoteName
+									+ " disconnecting as could not ping", e);
+							disconnect();
+						}
+					}
+				}
+			};
+			registerReceiver(
+					toCancel,
+					new IntentFilter(
+							"com.ninjatjj.smsapp.server.SmsApplicationServer.wake.remoteName"));
+			pi = PendingIntent
+					.getBroadcast(
+							SmsApplicationServer.this,
+							0,
+							new Intent(
+									"com.ninjatjj.smsapp.server.SmsApplicationServer.wake.remoteName"),
+							0);
+
+			timer.setRepeating(AlarmManager.ELAPSED_REALTIME_WAKEUP,
+					SystemClock.elapsedRealtime() + Constants.PING_RATE,
+					Constants.PING_RATE, pi);
+
 			try {
 				// Perform handshake
 				String readLine = bReader.readUTF();
 				if (readLine.equals("smsapp")) {
+					handlers.add(this);
+					clientID = bReader.readUTF().intern();
+					boolean votedOK = true;
+					boolean voted = false;
 
-					if (socket != null) {
-
-						String clientID = bReader.readUTF().intern();
-						boolean votedOK = true;
-						boolean voted = false;
-
-						synchronized (acceptedClients) {
-							if (!acceptedClients.contains(clientID)) {
-								Log.d("smsapp", "was new client: " + clientID);
-								Iterator<String> iterator = acceptedClients
-										.iterator();
-								while (iterator.hasNext()) {
-									Log.d("smsapp", "already accepted: "
-											+ iterator.next());
-								}
-								Log.d("smsapp", "will ask for acceptance");
-								if (connectionListeners.size() > 0) {
-									voted = true;
-									votedOK = connectionListeners.get(0)
-											.vetoConnection(clientID);
-									if (votedOK) {
-										Log.d("smsapp", "voted OK");
-										Editor edit = defaultSharedPreferences
-												.edit();
-										edit.putInt("acceptedClientCount",
-												++acceptedClientCount);
-										edit.putString("acceptedClient"
-												+ acceptedClientCount, clientID);
-										edit.commit();
-										acceptedClients.add(clientID);
-										Log.d("smsapp",
-												"added accepted client: "
-														+ clientID);
-									} else {
-										Log.d("smsapp", "voted no");
-									}
+					synchronized (acceptedClients) {
+						if (!acceptedClients.contains(clientID)) {
+							Log.d("smsapp", "was new client: " + clientID);
+							Iterator<String> iterator = acceptedClients
+									.iterator();
+							while (iterator.hasNext()) {
+								Log.d("smsapp",
+										"already accepted: " + iterator.next());
+							}
+							Log.d("smsapp", "will ask for acceptance");
+							if (connectionListeners.size() > 0) {
+								voted = true;
+								votedOK = connectionListeners.get(0)
+										.vetoConnection(clientID);
+								if (votedOK) {
+									Log.d("smsapp", "voted OK");
+									Editor edit = defaultSharedPreferences
+											.edit();
+									edit.putInt("acceptedClientCount",
+											++acceptedClientCount);
+									edit.putString("acceptedClient"
+											+ acceptedClientCount, clientID);
+									edit.commit();
+									acceptedClients.add(clientID);
+									Log.d("smsapp", "added accepted client: "
+											+ clientID);
 								} else {
-									Log.d("smsapp",
-											"no-one available to ask for client acceptance");
+									Log.d("smsapp", "voted no");
 								}
 							} else {
-								voted = true;
-								// Log.d("smsapp",
-								// "was previously accepted client: "
-								// + clientID);
+								Log.d("smsapp",
+										"no-one available to ask for client acceptance");
 							}
-						}
-						if (!votedOK || !voted) {
-							disconnect();
-							handlers.remove(this);
-							return;
 						} else {
-							Log.d("smsapp", "Client connected: " + clientID);
+							voted = true;
+							// Log.d("smsapp",
+							// "was previously accepted client: "
+							// + clientID);
 						}
+					}
+					if (!votedOK || !voted) {
+						disconnect();
+						handlers.remove(this);
+						return;
+					} else {
+						Log.d("smsapp", "Client connected: " + clientID);
 					}
 
 					for (ConnectionListener handler : connectionListeners) {
@@ -1217,17 +1063,10 @@ public class SmsApplicationServer extends Service implements SmsApplication {
 					}
 					if (defaultSharedPreferences.getBoolean(
 							"persistentNotification", true)) {
-						// persistentNotification.number =
-						// getConnectedClientCount();
-						// NotificationManager notificationManger =
-						// (NotificationManager)
-						// getSystemService(Context.NOTIFICATION_SERVICE);
-						// notificationManger.notify(01,
-						// persistentNotification);
+						// Just to update the count
 						startForeground();
 					}
 
-					pWriter = new DataOutputStream(outStream);
 					pWriter.writeUTF("smsappserver");
 					Set<Sms> messages = getMessages();
 					pWriter.writeInt(messages.size());
@@ -1256,51 +1095,12 @@ public class SmsApplicationServer extends Service implements SmsApplication {
 						signalStrengthListeners.add(this);
 					}
 
-					toCancel = new BroadcastReceiver() {
-						@Override
-						public void onReceive(Context c, Intent i) {
-							if (System.currentTimeMillis() - lastPing > Constants.PING_RATE * 2) {
-								Log.w("smsapp", "PingHandler-" + remoteName
-										+ "did not receive a ping within: "
-										+ (Constants.PING_RATE * 2) / 1000
-										+ " seconds, last ping was at: "
-										+ new Date(lastPing));
-								disconnect();
-							} else {
-								try {
-									// Log.d("smsapp", "PingHandler-" +
-									// remoteName
-									// + " sending ping");
-									synchronized (pWriter) {
-										pWriter.writeByte(Constants.PING);
-										pWriter.flush();
-									}
-								} catch (Throwable e) {
-									Log.w("smsapp",
-											"PingHandler-"
-													+ remoteName
-													+ " disconnecting as could not ping",
-											e);
-									disconnect();
-								}
-							}
+					synchronized (this) {
+						if (wl != null) {
+							wl.release();
+							wl = null;
 						}
-					};
-					registerReceiver(
-							toCancel,
-							new IntentFilter(
-									"com.ninjatjj.smsapp.server.SmsApplicationServer.wake.remoteName"));
-					pi = PendingIntent
-							.getBroadcast(
-									SmsApplicationServer.this,
-									0,
-									new Intent(
-											"com.ninjatjj.smsapp.server.SmsApplicationServer.wake.remoteName"),
-									0);
-					timer.setRepeating(
-							AlarmManager.ELAPSED_REALTIME_WAKEUP,
-							SystemClock.elapsedRealtime() + Constants.PING_RATE,
-							Constants.PING_RATE, pi);
+					}
 
 					while (true) {
 						int command = bReader.readByte();
@@ -1322,6 +1122,7 @@ public class SmsApplicationServer extends Service implements SmsApplication {
 						default:
 							throw new Exception("Unknown command: " + command);
 						}
+
 					}
 				}
 			} catch (Exception e) {
@@ -1341,24 +1142,18 @@ public class SmsApplicationServer extends Service implements SmsApplication {
 					// NotificationManager notificationManger =
 					// (NotificationManager)
 					// getSystemService(Context.NOTIFICATION_SERVICE);
-					// notificationManger.notify(01, persistentNotification);
+					// notificationManger.notify(01,
+					// persistentNotification);
 					startForeground();
 				}
 			}
+
 		}
 	}
 
 	public int getConnectedClientCount() {
-		int count = 0;
-		if (bssp != null) {
-			count += bssp.getConnectedClientCount();
-		}
 
-		if (ssp != null) {
-			count += ssp.getConnectedClientCount();
-		}
-
-		return count;
+		return handlers.size();
 	}
 
 	public boolean hasUnread(String address) {

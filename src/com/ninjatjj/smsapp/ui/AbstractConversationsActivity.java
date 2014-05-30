@@ -6,7 +6,6 @@ import java.util.Set;
 
 import android.app.Activity;
 import android.app.AlertDialog;
-import android.bluetooth.BluetoothAdapter;
 import android.content.Context;
 import android.content.DialogInterface;
 import android.content.Intent;
@@ -96,19 +95,6 @@ public abstract class AbstractConversationsActivity extends Activity implements
 			}
 
 		});
-
-		if (PreferenceManager.getDefaultSharedPreferences(
-				AbstractConversationsActivity.this).getBoolean("useBluetooth",
-				false)) {
-			if (BluetoothAdapter.getDefaultAdapter() == null) {
-				AlertBox("Warning", "Bluetooth Not supported", false);
-			}
-			if (!BluetoothAdapter.getDefaultAdapter().isEnabled()) {
-				Intent enableBtIntent = new Intent(
-						BluetoothAdapter.ACTION_REQUEST_ENABLE);
-				startActivity(enableBtIntent);
-			}
-		}
 
 		if (PreferenceManager.getDefaultSharedPreferences(
 				AbstractConversationsActivity.this).getBoolean("useWifi", true)) {
