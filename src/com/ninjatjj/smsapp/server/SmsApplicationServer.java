@@ -522,7 +522,7 @@ public class SmsApplicationServer extends Service implements SmsApplication {
 					while (true) {
 						check.set(false);
 						poll();
-						if (check.getAndSet(false) == false) {
+						if (check.get() == false) {
 							break;
 						}
 					}
