@@ -566,7 +566,9 @@ public class SmsApplicationServer extends Service implements SmsApplication {
 					// Log.d("smsapp", "recv check found: " +
 					// sms.getReceived()
 					// + " " + sms.getAddress() + " " + sms.getBody());
-					messages.add(sms);
+					if (sms.getAddress() != null && sms.getAddress().length() > 0) {
+						messages.add(sms);
+					}
 				} while (cursor.moveToNext());
 				cursor.close();
 			}
@@ -594,7 +596,9 @@ public class SmsApplicationServer extends Service implements SmsApplication {
 							sms.setBody(columnValue);
 						}
 					}
-					messages.add(sms);
+					if (sms.getAddress() != null && sms.getAddress().length() > 0) {
+						messages.add(sms);
+					}
 				} while (cursor.moveToNext());
 				cursor.close();
 			}
