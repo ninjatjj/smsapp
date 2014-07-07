@@ -17,8 +17,8 @@
     <CheckBoxPreference
         android:defaultValue="true"
         android:key="startAtBoot"
-        android:summary="Launch at boot?"
-        android:title="Start at phone boot" >
+        android:summary="Also enables launch at boot"
+        android:title="Run as background service" >
     </CheckBoxPreference>
 
     <Preference

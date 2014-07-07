@@ -20,6 +20,7 @@ import android.util.Log;
 
 import com.ninjatjj.smsapp.R;
 import com.ninjatjj.smsapp.StartActivity;
+import com.ninjatjj.smsapp.client.SmsApplicationClient;
 
 public class UserSettingsActivity extends PreferenceActivity implements
 		OnSharedPreferenceChangeListener, ConnectionListener {
@@ -50,6 +51,12 @@ public class UserSettingsActivity extends PreferenceActivity implements
 				application.startForeground();
 			} else {
 				application.stopForeground();
+			}
+		} else if (key.equals("startAtBoot")) {
+			if (settings.getBoolean("startAtBoot", true)) {
+				startService(new Intent(SmsApplicationServer.class.getName()));
+			} else {
+				stopService(new Intent(SmsApplicationServer.class.getName()));
 			}
 		}
 	}

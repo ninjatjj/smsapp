@@ -16,6 +16,7 @@ import android.view.MenuItem;
 
 import com.ninjatjj.smsapp.NewMessageActivity;
 import com.ninjatjj.smsapp.R;
+import com.ninjatjj.smsapp.client.SmsApplicationClient;
 import com.ninjatjj.smsapp.core.Sms;
 import com.ninjatjj.smsapp.ui.AbstractConversationsActivity;
 
@@ -140,7 +141,11 @@ public class ConversationsActivity extends AbstractConversationsActivity
 	public void onCreate(Bundle savedInstanceState) {
 		super.onCreate(savedInstanceState);
 
-		startService(new Intent(SmsApplicationServer.class.getName()));
+		boolean startAtBoot = PreferenceManager.getDefaultSharedPreferences(this).getBoolean(
+				"startAtBoot", false);
+		if (startAtBoot) {
+			startService(new Intent(SmsApplicationServer.class.getName()));
+		}
 
 		bindService(new Intent(this, SmsApplicationServer.class), mConnection,
 				Context.BIND_AUTO_CREATE);

@@ -27,6 +27,7 @@ import android.widget.Toast;
 import com.ninjatjj.smsapp.R;
 import com.ninjatjj.smsapp.StartActivity;
 import com.ninjatjj.smsapp.core.client.ClientConnectionListener;
+import com.ninjatjj.smsapp.server.SmsApplicationServer;
 
 public class UserSettingsActivity extends PreferenceActivity implements
 		OnSharedPreferenceChangeListener, ClientConnectionListener {
@@ -127,8 +128,13 @@ public class UserSettingsActivity extends PreferenceActivity implements
 			}
 			Preference findPreference = findPreference("wifiAddress");
 			findPreference.setSummary(address);
+		} else if (key.equals("startAtBoot")) {
+			if (settings.getBoolean("startAtBoot", true)) {
+				startService(new Intent(SmsApplicationClient.class.getName()));
+			} else {
+				stopService(new Intent(SmsApplicationClient.class.getName()));
+			}
 		}
-
 	}
 
 	@Override

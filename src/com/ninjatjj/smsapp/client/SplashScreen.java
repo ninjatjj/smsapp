@@ -47,7 +47,11 @@ public class SplashScreen extends Activity {
 		super.onCreate(savedInstanceState);
 		setContentView(R.layout.activity_splash);
 
-		startService(new Intent(SmsApplicationClient.class.getName()));
+		boolean startAtBoot = PreferenceManager.getDefaultSharedPreferences(this).getBoolean(
+				"startAtBoot", false);
+		if (startAtBoot) {
+			startService(new Intent(SmsApplicationClient.class.getName()));
+		}
 
 		bindService(new Intent(this, SmsApplicationClient.class), mConnection,
 				Context.BIND_AUTO_CREATE);
